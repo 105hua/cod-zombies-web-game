@@ -1,0 +1,17 @@
+services:
+  web:
+    build: .
+    ports:
+      - '${HOST_IP:-127.0.0.1}:${HOST_PORT:-3000}:3000'
+    environment:
+      ORIGIN: '${ORIGIN:-http://localhost:${HOST_PORT:-3000}}'
+    init: true
+    restart: unless-stopped
+    # Allow the Node adapter's 30-second graceful shutdown to finish.
+    stop_grace_period: 35s
+    networks:
+      - npm_proxy
+
+networks:
+  npm_proxy:
+    external: true
