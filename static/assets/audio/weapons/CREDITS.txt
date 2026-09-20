@@ -1,0 +1,60 @@
+DEAD SIGNAL — WEAPON AUDIO CREDITS
+
+Gunshot recordings: The Free Firearm Sound Library
+Created and recorded by Ben Jaszczak, Brian Nelson, Kevin Heras and Matthew Nanney.
+Source: https://opengameart.org/content/the-free-firearm-sound-library
+Archive: https://opengameart.org/sites/default/files/Prepared%20SFX%20Library.7z
+License: CC0 1.0 — https://creativecommons.org/publicdomain/zero/1.0/
+The six *-shot-*.wav adaptations are also dedicated under CC0 1.0.
+
+Game file             Original archive member                   Start (seconds)
+pistol-shot-1.wav      Prepared SFX Library/1911/A_42P.wav        0.940438
+pistol-shot-2.wav      Prepared SFX Library/1911/A_42P.wav        5.000542
+rifle-shot-1.wav       Prepared SFX Library/AR-15/D_32P.wav       0.702729
+rifle-shot-2.wav       Prepared SFX Library/AR-15/D_32P.wav       5.646417
+shotgun-shot-1.wav     Prepared SFX Library/Model 12/K_22P.wav    0.841125
+shotgun-shot-2.wav     Prepared SFX Library/Model 12/K_22P.wav    7.444375
+
+These are close-distance 1911 .45, AR-15/M4 .223/5.56 and Winchester
+Model 12 12-gauge recordings respectively. Two distinct shots were extracted
+per weapon. The AR-4 and Trench-12 are game weapon names, not claims of
+recordings from firearms bearing those names.
+
+Mechanical recordings: Handling Guns / Guns by Gary
+Author: Gary — http://fossilrecords.net/
+Originally recorded for PARPG; submitted to OpenGameArt by qubodup.
+Source: https://opengameart.org/content/handling-guns
+Archive: https://opengameart.org/sites/default/files/Gary%20Guns.zip
+License: Creative Commons Attribution-ShareAlike 3.0 Unported
+https://creativecommons.org/licenses/by-sa/3.0/
+Legal code: https://creativecommons.org/licenses/by-sa/3.0/legalcode
+The nine mechanical WAV adaptations below are distributed under that same
+CC-BY-SA 3.0 license. Retain this credit and license when redistributing them.
+
+Game file             Original archive member           Start     Length
+magazine-out.wav      Gary Guns/45ACP_Loading.wav         3.10 s    0.40 s
+magazine-in.wav       Gary Guns/45ACP_Loading.wav         0.38 s    0.23 s
+slide-back.wav        Gary Guns/45ACP_Loading.wav         6.26 s    0.22 s
+slide-forward.wav     Gary Guns/45ACP_Loading.wav         7.45 s    0.18 s
+pistol-empty.wav      Gary Guns/45ACP_slide.wav           1.51 s    0.10 s
+action-back.wav       Gary Guns/12ga_dry.wav              0.47 s    0.34 s
+action-forward.wav    Gary Guns/12ga_dry.wav              2.34 s    0.22 s
+shotgun-empty.wav     Gary Guns/12ga_dry.wav              4.12 s    0.12 s
+shell-in.wav          Gary Guns/12ga_load_chamber.wav     0.59 s    0.50 s
+
+Mechanical sources are M1911A1 .45 ACP and Browning Belgian semi-automatic
+12-gauge handling. Pistol magazine/slide textures are reused at a lower
+playback rate for the rifle. The shotgun pump uses adapted bolt-open/close
+textures, not a claimed recording of an actual Model 12 pump. Event timing
+follows the game's visible magazine, shell-feed, slide and pump animations.
+
+Adaptations for Dead Signal: isolated events; mono downmix; 48 kHz, 16-bit PCM;
+55 Hz gunshot / 90 Hz mechanical high-pass filtering; peak normalization;
+short boundary fades; gunshot tails trimmed to 0.72 s (pistol), 0.56 s (rifle)
+and 0.92 s (shotgun). Runtime mixing varies shot playback rate by up to 0.3%
+and gain by up to 4%, retaining the original recorded reports and reflections.
+No synthetic gunshot bass sweep or added cinematic reverb is used.
+
+The recordings are supplied without warranty. The original authors do not
+endorse this game. These notices describe the audio assets, not a grant of
+rights to unrelated game code or artwork.

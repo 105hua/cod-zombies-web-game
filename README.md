@@ -6,7 +6,7 @@
 
 An original solo, first-person zombie survival game built with SvelteKit, TypeScript, and Babylon.js. Survive escalating rounds in **Blackwater Depot**, earn points, and purchase equipment while the horde remains active.
 
-The gameplay reference is the collected [Survival research](./docs/README.md). The game uses a classic-inspired hit/kill points economy and compact-map progression. Enemy curves, prices, timings, and drop probabilities are original balance choices—not verified Call of Duty formulas. Names, visuals, environment, and synthesized sounds are original; no Call of Duty assets are included.
+The gameplay reference is the collected [Survival research](./docs/README.md). The game uses a classic-inspired hit/kill points economy and compact-map progression. Enemy curves, prices, timings, and drop probabilities are original balance choices—not verified Call of Duty formulas. Visuals, environment, and non-weapon synthesized sounds are original; weapon audio uses licensed firearm recordings. No Call of Duty assets are included.
 
 ## Run
 
@@ -34,6 +34,8 @@ Desktop keyboard and mouse are recommended. Touch devices receive movement, look
 | Pause          | Escape or P; losing focus also pauses     |
 
 Begin/resume captures the mouse. Escape releases it. The pause screen contains mouse sensitivity and sound volume controls. Settings last for the mounted game; runs and records are not saved. Death shows the round reached, eliminations, and elapsed time; **Try again** resets the complete run and map.
+
+The **Credits** button beside **How to Survive** on the Play Solo screen opens the audio acknowledgements, source links, and licenses. The scrollable dialog supports keyboard navigation, closes with **Close** or **Escape**, and returns focus to the Credits button. Source links and the full attribution file open in a new tab without starting a game.
 
 ## Survival loop
 
@@ -73,19 +75,21 @@ Collected by walking over glowing pickups; uncollected drops expire after 25 sec
 
 Every tenth kill guarantees an ammo drop; other kills have a chance of a random pickup. Survival has no fixed final round or extraction.
 
-## Procedural presentation
+## Presentation and audio
 
-All models, textures, effects, and audio are generated locally; no external art or sound files are fetched.
+Models, textures, and visual effects are generated locally. Weapon recordings are bundled with the game; no third-party asset service is contacted during play. Other audio remains synthesized.
 
 - **Depot:** weathered concrete, timber, steel and asphalt, surface relief, puddles, railway fittings, pipes, cables and debris. Cloud cover, a modeled moon, tone mapping and environment-only shadows establish the night scene without changing the original map footprint or collision layout.
 - **Stations:** physical weapon displays, an opening supply crate, a rolling gate, a Vitality dispenser and an animated Overcharge workbench respond to purchases.
 - **Zombies:** three articulated worker variants with continuous anatomical meshes, carved eye sockets and cheek hollows, amber eyes, open jaws and individual teeth/fingers. Ragged workwear, exposed ribs, skin discoloration, facial creases and shared 256px color/normal maps replace the primitive block-and-oval look. Movement-driven gait, committed attack windups, localized hit reactions and headshot regions remain intact. Attacks can be dodged and cannot reach through solid cover. Dead bodies stop blocking shots immediately, collapse and expire; at most ten corpses remain visible.
 - **Weapons:** distinct pistol, rifle and shotgun assemblies with sights, barrels, gloved arms, aim transitions, recoil, movement sway, reload mechanisms, muzzle flashes and pooled ejected casings. Reload animation does not change ammunition accounting.
-- **Combat feedback:** pooled impact fragments and bullet marks, modeled pickups with expiry blinking, weapon-specific synthesized shots, reloads, footsteps, enemy cues and environmental sound. Positional cues use distance attenuation and stereo panning; pausing, death and muting silence active voices.
+- **Combat feedback:** pooled impact fragments and bullet marks, modeled pickups with expiry blinking, recorded weapon reports and mechanical actions, synthesized footsteps, enemy cues and environmental sound. Positional cues use distance attenuation and stereo panning; pausing, death and muting silence active voices.
+- **Weapon audio:** two close-recorded takes each of a 1911, AR-15/M4 and Winchester Model 12 replace the shared noise/bass-sweep gunshots. Recorded magazine, slide, shell and bolt textures follow reload and pump animation phases, including last-shell auto-reloads and pause/resume. Fifteen mono WAV clips total approximately 630 KiB and are decoded once before the ready screen. A loading failure is logged and reported in the HUD when play begins; gameplay remains available without sound.
+- **Audio credits:** gunshots by Ben Jaszczak, Brian Nelson, Kevin Heras and Matthew Nanney ([The Free Firearm Sound Library](https://opengameart.org/content/the-free-firearm-sound-library), CC0). Mechanical recordings by Gary ([Handling Guns](https://opengameart.org/content/handling-guns), CC-BY-SA 3.0); the adapted mechanical WAVs retain that license. Rifle handling and shotgun pump sounds use adapted mechanical textures, not exact-model action recordings. Full source mappings, modifications and license links accompany the assets in [CREDITS.txt](./static/assets/audio/weapons/CREDITS.txt).
 
 Zombie art takes visual cues from the gaunt faces, worn clothing and amber eyes of [Black Ops-era Kino der Toten](https://static.wikia.nocookie.net/callofduty/images/f/fb/Zombie_Mouth_Open_Kino_BO1.png/revision/latest) and [Black Ops III's The Giant](https://static.wikia.nocookie.net/callofduty/images/5/58/TheGiant_Zombies_BO3.png/revision/latest). These are reference images only: all shipped geometry and textures are original procedural work, not extracted game assets. Detail is merged by animated joint, material and hit region; surface maps are shared across the horde and disposed with the scene.
 
-The renderer warms scene materials before deployment. Slow rendered frames use bounded simulation substeps, keeping movement, reloads and short shot flashes responsive without a single oversized collision step. Impact fragments, bullet marks and casings use fixed-size pools; generated sound buffers are cached and concurrent audio voices are capped.
+The renderer warms scene materials before deployment. Slow rendered frames use bounded simulation substeps, keeping movement, reloads and short shot flashes responsive without a single oversized collision step. Impact fragments, bullet marks and casings use fixed-size pools; decoded recordings and generated noise buffers are cached, and concurrent audio voices are capped.
 
 ## Architecture
 
@@ -109,7 +113,7 @@ src/lib/
     systems/Survival.ts     Renderer-independent rules, economy, rounds, timers
     systems/Navigation.ts   Planar collision and grid-based pursuit around obstacles
     systems/CombatEffects.ts Pooled impacts, bullet marks, modeled pickups
-    systems/Audio.ts        Bounded synthesized spatial and environmental audio
+    systems/Audio.ts        Recorded weapons, synthesized ambience, bounded spatial audio
 ```
 
 Svelte owns menus and HUD, not the frame loop. The canvas attachment lazy-loads the runtime in the browser, returns cleanup synchronously, and guards against unmount during loading. HUD snapshots publish at most once per 80 milliseconds during play, plus state transitions. Pausing stops simulation timers, enemies, spawning, reloads, and power-ups.
@@ -369,4 +373,4 @@ lifetime and back up both deployment volumes.
 
 ## Scope
 
-Implemented: one complete solo survival map, procedural 3D art and sound, three weapons, purchases, upgrades, power-ups, escalating rounds, pause/settings, death/restart, and touch controls. Multiplayer, story quests, barricade repair, special enemy types, two-weapon inventory, saves, and extraction are not part of this basic game.
+Implemented: one complete solo survival map, procedural 3D art, recorded weapon audio and synthesized environmental sound, three weapons, purchases, upgrades, power-ups, escalating rounds, pause/settings, death/restart, and touch controls. Multiplayer, story quests, barricade repair, special enemy types, two-weapon inventory, saves, and extraction are not part of this basic game.

@@ -1,6 +1,7 @@
 <script lang="ts">
-	import { resolve } from '$app/paths';
+	import { asset, resolve } from '$app/paths';
 	let showManual = $state(false);
+	let creditsDialog: HTMLDialogElement;
 </script>
 
 <div class="menu">
@@ -25,12 +26,23 @@
 				firepower, and see how long you last.
 			</p>
 			<a class="primary deploy" href={resolve('/game')}>PLAY SOLO <span>↗</span></a>
-			<button
-				class="manual-button"
-				aria-expanded={showManual}
-				onclick={() => (showManual = !showManual)}
-				><span>+</span> {showManual ? 'CLOSE FIELD MANUAL' : 'HOW TO SURVIVE'}</button
-			>
+			<div class="secondary-actions">
+				<button
+					class="manual-button"
+					aria-expanded={showManual}
+					onclick={() => (showManual = !showManual)}
+					><span>+</span> {showManual ? 'CLOSE FIELD MANUAL' : 'HOW TO SURVIVE'}</button
+				>
+				<button
+					class="manual-button"
+					aria-haspopup="dialog"
+					aria-controls="game-credits"
+					onclick={() => {
+						creditsDialog.showModal();
+						creditsDialog.scrollTop = 0;
+					}}>CREDITS</button
+				>
+			</div>
 			<div class="system-note">
 				<span class="tiny-cross">+</span> KEYBOARD + MOUSE RECOMMENDED <span class="sep">/</span> TOUCH
 				SUPPORTED
@@ -218,6 +230,88 @@
 	</footer>
 </div>
 
+<dialog
+	id="game-credits"
+	class="credits"
+	{@attach (element) => {
+		creditsDialog = element;
+	}}
+	aria-labelledby="credits-title"
+>
+	<div class="credits-heading">
+		<div>
+			<span class="eyebrow">DEAD SIGNAL / ACKNOWLEDGEMENTS</span>
+			<h2 id="credits-title">CREDITS</h2>
+		</div>
+		<form method="dialog">
+			<button class="credits-close" aria-label="Close credits"
+				>CLOSE <span aria-hidden="true">×</span></button
+			>
+		</form>
+	</div>
+	<div class="credits-content">
+		<p class="credits-intro">The people and recordings behind the sounds of Blackwater Depot.</p>
+		<ul class="credit-list">
+			<li>
+				<span class="eyebrow">01 / GUNSHOT RECORDINGS</span>
+				<h3>The Free Firearm Sound Library</h3>
+				<p class="credit-authors">Ben Jaszczak, Brian Nelson, Kevin Heras &amp; Matthew Nanney</p>
+				<p>
+					Recorded 1911, AR-15/M4 and Winchester Model 12 reports. Adapted for the game with
+					individual shot trims, mono conversion, filtering, level adjustments and fades.
+				</p>
+				<div class="credit-links">
+					<a
+						href="https://opengameart.org/content/the-free-firearm-sound-library"
+						target="_blank"
+						rel="noopener noreferrer">Original recordings ↗</a
+					>
+					<a
+						href="https://creativecommons.org/publicdomain/zero/1.0/"
+						target="_blank"
+						rel="noopener noreferrer">CC0 1.0 ↗</a
+					>
+				</div>
+			</li>
+			<li>
+				<span class="eyebrow">02 / WEAPON HANDLING</span>
+				<h3>Handling Guns / Guns by Gary</h3>
+				<p class="credit-authors">
+					<a href="http://fossilrecords.net/" target="_blank" rel="noopener noreferrer">Gary ↗</a>
+					<span> · Recorded for PARPG; shared by qubodup.</span>
+				</p>
+				<p>
+					Magazine, slide, bolt, shell-loading and dry-fire recordings. Trimmed, filtered,
+					level-adjusted and retimed for the game. Rifle handling and shotgun pump layers use
+					adapted mechanical textures rather than exact-model action recordings.
+				</p>
+				<p>
+					The adapted mechanical clips retain the Creative Commons Attribution–ShareAlike 3.0
+					Unported license.
+				</p>
+				<div class="credit-links">
+					<a
+						href="https://opengameart.org/content/handling-guns"
+						target="_blank"
+						rel="noopener noreferrer">Original recordings ↗</a
+					>
+					<a
+						href="https://creativecommons.org/licenses/by-sa/3.0/"
+						target="_blank"
+						rel="noopener noreferrer">CC-BY-SA 3.0 ↗</a
+					>
+				</div>
+			</li>
+		</ul>
+		<div class="credits-notes">
+			<a href={asset('/assets/audio/weapons/CREDITS.txt')} target="_blank" rel="noopener noreferrer"
+				>Full audio credits &amp; source mappings ↗</a
+			>
+			<p>Links open in a new tab. Original creators do not endorse this game.</p>
+		</div>
+	</div>
+</dialog>
+
 <style>
 	.menu {
 		min-height: 100dvh;
@@ -340,6 +434,12 @@
 		width: 100%;
 		max-width: 350px;
 	}
+	.secondary-actions {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		column-gap: 28px;
+	}
 	.manual-button {
 		background: transparent;
 		border: 0;
@@ -349,6 +449,9 @@
 		padding: 22px 0;
 		min-height: 44px;
 		cursor: pointer;
+	}
+	.manual-button:hover {
+		color: var(--paper);
 	}
 	.manual-button span {
 		margin-right: 10px;
@@ -501,6 +604,119 @@
 		color: var(--muted);
 		line-height: 1.8;
 		margin: 0;
+	}
+	:global(body:has(#game-credits[open])) {
+		overflow: hidden;
+	}
+	.credits {
+		width: min(640px, calc(100vw - 32px));
+		max-height: calc(100dvh - 48px);
+		margin: auto;
+		padding: 0;
+		border: 1px solid #b5bbab40;
+		border-top: 3px solid var(--amber);
+		color: var(--paper);
+		background: var(--ink);
+		box-shadow: 0 24px 90px #0009;
+		overscroll-behavior: contain;
+	}
+	.credits::backdrop {
+		background: #060c10d9;
+	}
+	.credits-heading {
+		position: sticky;
+		top: 0;
+		z-index: 1;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 16px;
+		padding: 24px clamp(20px, 4vw, 32px);
+		border-bottom: 1px solid #b5bbab24;
+		background: var(--ink);
+	}
+	.credits .eyebrow {
+		color: var(--sand);
+		font: 10px/1.6 var(--font-mono);
+		letter-spacing: 0.1em;
+	}
+	.credits h2 {
+		margin: 8px 0 0;
+		font: 40px/1 var(--font-display);
+		letter-spacing: 0.02em;
+	}
+	.credits-close {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		min-height: 44px;
+		padding: 10px 12px;
+		border: 1px solid #b5bbab50;
+		color: var(--sand);
+		background: transparent;
+		font: 11px var(--font-mono);
+		cursor: pointer;
+	}
+	.credits-close:hover {
+		color: var(--ink);
+		background: var(--amber);
+	}
+	.credits-close span {
+		font-size: 20px;
+	}
+	.credits-content {
+		padding: 0 clamp(20px, 4vw, 32px) 28px;
+	}
+	.credits p {
+		color: var(--muted);
+		font-size: 14px;
+		line-height: 1.7;
+		margin: 12px 0;
+	}
+	.credits .credits-intro {
+		margin: 24px 0;
+	}
+	.credit-list {
+		padding: 0;
+		margin: 0;
+		list-style: none;
+	}
+	.credit-list li {
+		padding: 24px 0;
+		border-top: 1px solid #b5bbab24;
+	}
+	.credits h3 {
+		margin: 10px 0;
+		font-size: 20px;
+		font-weight: 500;
+		line-height: 1.4;
+	}
+	.credits .credit-authors {
+		color: var(--paper);
+	}
+	.credit-links {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px 24px;
+	}
+	.credits a {
+		display: inline-flex;
+		align-items: center;
+		min-height: 44px;
+		color: var(--amber);
+		font-size: 13px;
+		line-height: 1.6;
+		text-underline-offset: 4px;
+	}
+	.credits a:hover {
+		color: var(--paper);
+	}
+	.credits-notes {
+		padding-top: 16px;
+		border-top: 1px solid #b5bbab24;
+	}
+	.credits-notes p {
+		font-size: 12px;
 	}
 	@media (min-width: 1700px) {
 		main {

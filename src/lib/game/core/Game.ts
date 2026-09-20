@@ -50,7 +50,14 @@ export class Game {
 		lookX: 0,
 		lookY: 0
 	};
-	private readonly audioState = { moving: false, sprinting: false, health: 100, stamina: 100 };
+	private readonly audioState = {
+		moving: false,
+		sprinting: false,
+		health: 100,
+		stamina: 100,
+		weapon: 'pistol' as HudSnapshot['weapon'],
+		reloadProgress: 0
+	};
 	private hit = 0;
 	private damageFlash = 0;
 	private meleeCooldown = 0;
@@ -94,6 +101,12 @@ export class Game {
 
 	async start() {
 		try {
+			await this.audio.prepare().catch((error: unknown) => {
+				// Keep audio failures out of the graphics startup error boundary.
+				// activate() reports the retained loading failure in the HUD.
+				console.warn('Game audio unavailable', error);
+			});
+			if (this.disposed) return;
 			this.createLevel();
 			this.resize();
 			const scene = this.level!.scene;
@@ -199,11 +212,7 @@ export class Game {
 	}
 	reload() {
 		if (this.meleeCooldown > 0.35) return;
-		const before = this.run.state.reloading;
 		this.run.reload();
-		if (!before && this.run.state.reloading) {
-			this.audio.play('reload', { weapon: this.run.state.weapon });
-		}
 	}
 	interact() {
 		this.currentStation = this.findStation();
@@ -336,10 +345,7 @@ export class Game {
 	private update(dt: number) {
 		const { camera, world } = this.level!;
 		const state = this.run.state;
-		const wasReloading = state.reloading > 0;
 		const spawns = this.run.tick(dt);
-		if (wasReloading && state.reloading === 0)
-			this.audio.play('reloadEnd', { weapon: state.weapon });
 		if (state.round !== this.lastRound) {
 			this.lastRound = state.round;
 			this.audio.play('round');
@@ -435,7 +441,7 @@ export class Game {
 		this.pendingPistolShots = 0;
 		if (this.firing) {
 			if (state.magazine === 0 && !state.reloading && this.emptyCooldown === 0) {
-				this.audio.play('empty');
+				this.audio.play('empty', { weapon: state.weapon });
 				this.emptyCooldown = 0.5;
 			}
 			this.shoot();
@@ -449,6 +455,8 @@ export class Game {
 		this.audioState.sprinting = sprint;
 		this.audioState.health = state.health;
 		this.audioState.stamina = state.stamina;
+		this.audioState.weapon = state.weapon;
+		this.audioState.reloadProgress = pose.reloadProgress;
 		this.audio.update(dt, this.audioState);
 		this.presenceCooldown -= dt;
 		if (this.presenceCooldown <= 0) {
@@ -561,6 +569,7 @@ export class Game {
 
 	private createWeapon() {
 		this.meleePending = false;
+		this.audio.resetWeapon();
 		this.weapon?.equip(this.run.state.weapon, this.run.state.upgraded);
 	}
 

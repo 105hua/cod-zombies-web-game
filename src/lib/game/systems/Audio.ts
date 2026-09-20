@@ -1,14 +1,13 @@
+import { base } from '$app/paths';
 import type { WeaponId } from '../types';
 
 export type AudioCue =
 	| 'shot'
 	| 'hit'
 	| 'buy'
-	| 'reload'
 	| 'round'
 	| 'hurt'
 	| 'melee'
-	| 'reloadEnd'
 	| 'empty'
 	| 'gate'
 	| 'pickup'
@@ -28,6 +27,9 @@ interface AudioState {
 	sprinting: boolean;
 	health: number;
 	stamina: number;
+	weapon: WeaponId;
+	/** Zero when idle; otherwise normalized progress through the reload animation. */
+	reloadProgress: number;
 }
 
 interface Voice {
@@ -40,6 +42,31 @@ interface Voice {
 
 const MAX_VOICES = 24;
 const FLOOR = 0.0001;
+
+const WEAPON_CLIPS = [
+	'pistol-shot-1',
+	'pistol-shot-2',
+	'rifle-shot-1',
+	'rifle-shot-2',
+	'shotgun-shot-1',
+	'shotgun-shot-2',
+	'magazine-out',
+	'magazine-in',
+	'slide-back',
+	'slide-forward',
+	'pistol-empty',
+	'action-back',
+	'action-forward',
+	'shotgun-empty',
+	'shell-in'
+] as const;
+type WeaponClip = (typeof WEAPON_CLIPS)[number];
+
+const SHOTS: Record<WeaponId, readonly [WeaponClip, WeaponClip]> = {
+	pistol: ['pistol-shot-1', 'pistol-shot-2'],
+	rifle: ['rifle-shot-1', 'rifle-shot-2'],
+	shotgun: ['shotgun-shot-1', 'shotgun-shot-2']
+};
 
 export class GameAudio {
 	private context?: AudioContext;
@@ -58,6 +85,13 @@ export class GameAudio {
 	private leftFoot = false;
 	private variation = 0;
 	private activity = 0;
+	private readonly samples = new Map<WeaponClip, AudioBuffer>();
+	private readonly loading = new AbortController();
+	private sampleTask?: Promise<void>;
+	private samplesReady = false;
+	private readonly shotCount: Record<WeaponId, number> = { pistol: 0, rifle: 0, shotgun: 0 };
+	private reloadProgress = 0;
+	private pumpAge = -1;
 
 	get volume() {
 		return this.level;
@@ -69,7 +103,8 @@ export class GameAudio {
 		this.setMaster(this.paused ? 0 : this.level);
 	}
 
-	async unlock() {
+	/** Decode local recordings before the game becomes ready; do not unlock autoplay here. */
+	async prepare() {
 		if (this.disposed) return;
 		if (!this.context) {
 			const context = new AudioContext();
@@ -93,8 +128,39 @@ export class GameAudio {
 			}
 			this.noise = noise;
 		}
-		// Invoke resume directly in the gesture, not after a queued promise.
-		await this.applyContextState(this.context, ++this.transition);
+		this.sampleTask ??= this.loadSamples(this.context);
+		await this.sampleTask;
+	}
+
+	private async loadSamples(context: AudioContext) {
+		await Promise.all(
+			WEAPON_CLIPS.map(async (clip) => {
+				try {
+					const response = await fetch(`${base}/assets/audio/weapons/${clip}.wav`, {
+						signal: this.loading.signal
+					});
+					if (!response.ok) throw new Error(`HTTP ${response.status}`);
+					const data = await response.arrayBuffer();
+					if (this.disposed || this.loading.signal.aborted) return;
+					const buffer = await context.decodeAudioData(data);
+					if (!this.disposed && !this.loading.signal.aborted) this.samples.set(clip, buffer);
+				} catch (cause) {
+					if (!this.disposed) throw new Error(`Unable to load weapon audio: ${clip}`, { cause });
+				}
+			})
+		).catch((error: unknown) => {
+			this.loading.abort();
+			this.samples.clear();
+			throw error;
+		});
+		this.samplesReady = !this.disposed;
+	}
+
+	async unlock() {
+		if (this.disposed) return;
+		const prepared = this.prepare();
+		// Resume synchronously in the user gesture, before waiting for any downloads.
+		await Promise.all([prepared, this.applyContextState(this.context!, ++this.transition)]);
 	}
 
 	setPaused(paused: boolean) {
@@ -142,47 +208,41 @@ export class GameAudio {
 	}
 
 	private get audible() {
-		return !this.disposed && !this.paused && this.level > 0 && this.context?.state === 'running';
+		return (
+			!this.disposed &&
+			!this.paused &&
+			this.samplesReady &&
+			this.level > 0 &&
+			this.context?.state === 'running'
+		);
 	}
 
 	play(kind: AudioCue, options: AudioOptions = {}) {
+		const weapon = options.weapon ?? 'pistol';
+		if (kind === 'shot' && !this.disposed && !this.paused)
+			this.pumpAge = weapon === 'shotgun' ? 0 : -1;
 		if (!this.audible) return;
 		const voice = this.createVoice(options);
-		const weapon = options.weapon ?? 'pistol';
 		const pitch = 0.96 + ((this.variation++ % 7) / 6) * 0.08;
 		switch (kind) {
 			case 'shot': {
 				this.activity = 1;
-				const shotgun = weapon === 'shotgun';
-				const rifle = weapon === 'rifle';
-				this.noiseLayer(
+				const take = this.shotCount[weapon]++ % 2;
+				this.sample(
 					voice,
-					shotgun ? 0.19 : 0.085,
-					shotgun ? 0.78 : 0.5,
-					'highpass',
-					rifle ? 1350 : 820,
-					0,
-					0.001
+					SHOTS[weapon][take],
+					0.96 + Math.random() * 0.04,
+					0.997 + Math.random() * 0.006
 				);
-				this.tone(
-					voice,
-					(shotgun ? 92 : rifle ? 156 : 128) * pitch,
-					34,
-					shotgun ? 0.23 : 0.13,
-					shotgun ? 0.6 : 0.4,
-					'sine'
-				);
-				this.noiseLayer(
-					voice,
-					shotgun ? 0.55 : 0.31,
-					0.15,
-					'lowpass',
-					shotgun ? 740 : 1150,
-					0.015,
-					0.004
-				);
-				this.noiseLayer(voice, 0.038, 0.16, 'bandpass', 2900, 0.025);
-				this.tone(voice, 2200, 950, 0.025, 0.055, 'triangle', 0.018);
+				if (weapon !== 'shotgun') {
+					this.sample(
+						voice,
+						'slide-forward',
+						weapon === 'rifle' ? 0.065 : 0.085,
+						weapon === 'rifle' ? 0.88 : 1,
+						0.045
+					);
+				}
 				break;
 			}
 			case 'hit':
@@ -194,19 +254,13 @@ export class GameAudio {
 				this.noiseLayer(voice, 0.23, 0.28, 'bandpass', 1300, 0, 0.065, 380);
 				this.noiseLayer(voice, 0.11, 0.09, 'highpass', 3000, 0.06, 0.015);
 				break;
-			case 'reload':
-				this.noiseLayer(voice, 0.08, 0.17, 'bandpass', 1800);
-				this.tone(voice, 660, 210, 0.065, 0.055, 'triangle');
-				this.noiseLayer(voice, 0.14, 0.08, 'highpass', 2700, 0.08, 0.025);
-				break;
-			case 'reloadEnd':
-				this.noiseLayer(voice, 0.045, 0.25, 'bandpass', weapon === 'shotgun' ? 1400 : 2400);
-				this.tone(voice, 310, 110, 0.085, 0.13, 'triangle');
-				this.noiseLayer(voice, 0.035, 0.18, 'highpass', 1800, 0.075);
-				break;
 			case 'empty':
-				this.noiseLayer(voice, 0.022, 0.12, 'bandpass', 2500);
-				this.tone(voice, 900, 420, 0.025, 0.055, 'triangle');
+				this.sample(
+					voice,
+					weapon === 'shotgun' ? 'shotgun-empty' : 'pistol-empty',
+					0.22,
+					weapon === 'rifle' ? 0.88 : 1
+				);
 				break;
 			case 'buy':
 				this.noiseLayer(voice, 0.09, 0.12, 'bandpass', 850);
@@ -256,7 +310,9 @@ export class GameAudio {
 			this.setPaused(true);
 			return;
 		}
-		if (!this.audible || !Number.isFinite(dt) || dt <= 0) return;
+		if (!Number.isFinite(dt) || dt <= 0) return;
+		this.updateWeaponAudio(Math.min(dt, 0.1), state);
+		if (!this.audible) return;
 		// Cadences are simulation-driven and cannot catch up in a burst after a stalled frame.
 		const elapsed = Math.min(dt, 0.1);
 		this.activity = Math.max(0, this.activity - elapsed * 1.6);
@@ -289,6 +345,72 @@ export class GameAudio {
 			this.tone(voice, 59, 58.8, 3.8, level * 0.45, 'sine', 0, 1);
 			this.ambienceClock = 3.5;
 		}
+	}
+
+	resetWeapon() {
+		this.pumpAge = -1;
+		this.reloadProgress = 0;
+	}
+
+	private updateWeaponAudio(dt: number, state: AudioState) {
+		const progress = state.reloadProgress;
+		const previous = progress < this.reloadProgress ? 0 : this.reloadProgress;
+		this.reloadProgress = progress;
+		const age = this.pumpAge;
+		if (state.weapon !== 'shotgun') this.pumpAge = -1;
+		else if (age >= 0) this.pumpAge += dt;
+		if (!this.audible) {
+			if (this.pumpAge >= 0.48) this.pumpAge = -1;
+			return;
+		}
+		const shotgun = state.weapon === 'shotgun';
+		const rate = state.weapon === 'rifle' ? 0.88 : 1;
+		if (progress > 0) {
+			// These thresholds follow WeaponView's magazine, shell-feed and rack phases.
+			if (shotgun) {
+				if (
+					(previous < 0.22 && progress >= 0.22) ||
+					(previous < 0.42 && progress >= 0.42) ||
+					(previous < 0.62 && progress >= 0.62)
+				) {
+					this.sample(this.createVoice({}), 'shell-in', 0.2);
+				}
+			} else {
+				if (previous < 0.18 && progress >= 0.18)
+					this.sample(this.createVoice({}), 'magazine-out', 0.18, rate);
+				if (previous < 0.6 && progress >= 0.6)
+					this.sample(this.createVoice({}), 'magazine-in', 0.24, rate);
+			}
+			if (previous < 0.78 && progress >= 0.78) {
+				this.sample(this.createVoice({}), shotgun ? 'action-back' : 'slide-back', 0.2, rate);
+			}
+			if (previous < 0.9 && progress >= 0.9) {
+				this.sample(this.createVoice({}), shotgun ? 'action-forward' : 'slide-forward', 0.26, rate);
+			}
+		}
+		if (shotgun && age >= 0) {
+			if (age < 0.12 && this.pumpAge >= 0.12) {
+				this.sample(this.createVoice({}), 'action-back', 0.18, 1.12);
+			}
+			if (age < 0.34 && this.pumpAge >= 0.34) {
+				this.sample(this.createVoice({}), 'action-forward', 0.24, 1.08);
+			}
+			if (this.pumpAge >= 0.48) this.pumpAge = -1;
+		}
+	}
+
+	private sample(voice: Voice, clip: WeaponClip, level: number, rate = 1, delay = 0) {
+		const context = this.context!;
+		const source = context.createBufferSource();
+		source.buffer = this.samples.get(clip)!;
+		source.playbackRate.value = rate;
+		const gain = context.createGain();
+		gain.gain.value = level;
+		source.connect(gain);
+		gain.connect(voice.output);
+		voice.nodes.push(gain);
+		this.trackSource(voice, source);
+		source.start(context.currentTime + delay);
 	}
 
 	private createVoice(options: AudioOptions): Voice {
@@ -409,6 +531,9 @@ export class GameAudio {
 	dispose() {
 		if (this.disposed) return;
 		this.disposed = true;
+		this.loading.abort();
+		this.samplesReady = false;
+		this.samples.clear();
 		this.transition++;
 		this.setMaster(0);
 		this.stopVoices();
