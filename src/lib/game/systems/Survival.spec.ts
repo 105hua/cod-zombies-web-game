@@ -106,6 +106,23 @@ describe('Survival', () => {
 		expect(run.state.magazine).toBe(0);
 	});
 
+	it.each(['pistol', 'rifle', 'shotgun'] as const)(
+		'only bypasses the firing interval for fresh pistol presses: %s',
+		(weapon) => {
+			const run = startRun();
+			if (weapon !== 'pistol') {
+				run.state.points = 2000;
+				run.buy(weapon);
+			}
+			const before = run.state.magazine;
+			expect(run.finishShot(true)).toBe(true);
+			expect(run.finishShot(true)).toBe(weapon === 'pistol');
+			expect(run.state.magazine).toBe(before - (weapon === 'pistol' ? 2 : 1));
+			run.reload();
+			expect(run.finishShot(true)).toBe(false);
+		}
+	);
+
 	it('does not charge insufficient or duplicate permanent purchases', () => {
 		const run = startRun();
 		expect(run.buy('gate')).toBe(false);

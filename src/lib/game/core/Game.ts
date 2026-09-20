@@ -27,6 +27,7 @@ export class Game {
 	private pickups: Pickup[] = [];
 	private keys = new Set<string>();
 	private firing = false;
+	private pendingPistolShots = 0;
 	private aiming = false;
 	private disposed = false;
 	private touch = false;
@@ -193,6 +194,7 @@ export class Game {
 		camera.rotation.x = Math.max(-1.35, Math.min(1.35, camera.rotation.x + dy * scale));
 	}
 	setFiring(value: boolean) {
+		if (value && !this.firing && this.run.state.weapon === 'pistol') this.pendingPistolShots++;
 		this.firing = value;
 	}
 	reload() {
@@ -251,6 +253,7 @@ export class Game {
 	private clearInput() {
 		this.keys.clear();
 		this.firing = this.aiming = false;
+		this.pendingPistolShots = 0;
 		this.touchX = this.touchZ = 0;
 		this.lookX = this.lookY = 0;
 	}
@@ -271,7 +274,7 @@ export class Game {
 		if (event.pointerType === 'touch' || this.run.state.phase !== 'playing') return;
 		if (document.pointerLockElement !== this.canvas) return;
 		// Chorded button changes use pointermove; buttons is the complete held state.
-		this.firing = (event.buttons & 1) !== 0;
+		this.setFiring((event.buttons & 1) !== 0);
 		this.aiming = (event.buttons & 2) !== 0;
 		if (event.type === 'pointermove') this.look(event.movementX, event.movementY);
 	};
@@ -427,6 +430,9 @@ export class Game {
 		pose.lookY = this.lookY;
 		this.weapon?.update(dt, pose);
 		this.lookX = this.lookY = 0;
+		// Retain distinct clicks between frames without accelerating held fire.
+		for (let shot = 0; shot < this.pendingPistolShots; shot++) this.shoot(true);
+		this.pendingPistolShots = 0;
 		if (this.firing) {
 			if (state.magazine === 0 && !state.reloading && this.emptyCooldown === 0) {
 				this.audio.play('empty');
@@ -460,8 +466,8 @@ export class Game {
 		}
 	}
 
-	private shoot() {
-		if (!this.level || this.meleeCooldown > 0.35 || !this.run.finishShot()) return;
+	private shoot(triggerPressed = false) {
+		if (!this.level || this.meleeCooldown > 0.35 || !this.run.finishShot(triggerPressed)) return;
 		const spec = WEAPONS[this.run.state.weapon];
 		this.audio.play('shot', { weapon: this.run.state.weapon });
 		this.weapon?.fire();

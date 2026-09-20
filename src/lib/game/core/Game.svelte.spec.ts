@@ -4,6 +4,51 @@ import type { UniversalCamera } from '@babylonjs/core/Cameras/universalCamera';
 import { Game } from './Game';
 import type { HudSnapshot } from '../types';
 
+it('fires every rapid M1911 click, including clicks between rendered frames', async () => {
+	const canvas = document.createElement('canvas');
+	document.body.append(canvas);
+	let latest: HudSnapshot | undefined;
+	const game = new Game(canvas, (state) => {
+		latest = state;
+	});
+	try {
+		await game.start();
+		game.begin(true);
+		vi.spyOn(document, 'pointerLockElement', 'get').mockReturnValue(canvas);
+		const engine = Engine.LastCreatedEngine!;
+		const render = engine.activeRenderLoops[0];
+		engine.stopRenderLoop();
+		vi.spyOn(engine, 'getDeltaTime').mockReturnValue(100);
+		const click = () => {
+			for (const [type, buttons] of [
+				['pointerdown', 1],
+				['pointerup', 0]
+			] as const) {
+				canvas.dispatchEvent(
+					new PointerEvent(type, { bubbles: true, pointerType: 'mouse', button: 0, buttons })
+				);
+			}
+		};
+		click();
+		render();
+		expect(latest!.magazine).toBe(7);
+		click();
+		click();
+		render();
+		expect(latest!.magazine).toBe(5);
+		render();
+		expect(latest!.magazine).toBe(5);
+		game.reload();
+		click();
+		render();
+		expect(latest!.magazine).toBe(5);
+	} finally {
+		vi.restoreAllMocks();
+		game.dispose();
+		canvas.remove();
+	}
+});
+
 it('keeps firing when a different touch pointer is released', async () => {
 	const canvas = document.createElement('canvas');
 	document.body.append(canvas);

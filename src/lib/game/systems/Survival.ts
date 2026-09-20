@@ -140,12 +140,12 @@ export class Survival {
 		return 1;
 	}
 
-	finishShot(): boolean {
+	finishShot(triggerPressed = false): boolean {
 		const state = this.state;
 		if (
 			state.phase !== 'playing' ||
 			state.reloading > 0 ||
-			this.shotCooldown > 0 ||
+			(this.shotCooldown > 0 && !(triggerPressed && state.weapon === 'pistol')) ||
 			state.magazine <= 0
 		) {
 			return false;
