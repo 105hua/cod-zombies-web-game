@@ -324,7 +324,7 @@ docker cp "$candidate_id:/app/build/client/_app/immutable/." - | \
         done < /tmp/asset-files
     '
 
-smoke_id=$(docker create --name "${DEPLOY_PROJECT}-smoke-${RELEASE_ID}" --init --shm-size=1g \
+smoke_id=$(docker create --name "${DEPLOY_PROJECT}-deploy-smoke-${RELEASE_ID}" --init --shm-size=1g \
     --network "$private_network" --label "deploy.project=$DEPLOY_PROJECT" --label deploy.role=smoke \
     --env CI=true --env "PLAYWRIGHT_BASE_URL=http://${candidate}:3000" \
     "$ci_image" bun x playwright test)
