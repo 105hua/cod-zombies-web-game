@@ -21,7 +21,6 @@ Desktop keyboard and mouse are recommended. Touch devices receive movement, look
 
 ## Controls
 
-
 | Action         | Control                                   |
 | -------------- | ----------------------------------------- |
 | Move           | WASD                                      |
@@ -33,7 +32,6 @@ Desktop keyboard and mouse are recommended. Touch devices receive movement, look
 | Melee          | V                                         |
 | Buy / interact | E while facing a nearby station           |
 | Pause          | Escape or P; losing focus also pauses     |
-
 
 Begin/resume captures the mouse. Escape releases it. The pause screen contains mouse sensitivity and sound volume controls. Settings last for the mounted game; runs and records are not saved. Death shows the round reached, eliminations, and elapsed time; **Try again** resets the complete run and map.
 
@@ -51,16 +49,14 @@ Begin/resume captures the mouse. Escape releases it. The pause screen contains m
 
 ### In-world purchases
 
-
 | Station                       | Points | Effect                                                  |
-| ----------------------------- | ------: | ------------------------------------------------------- |
-| AR-4, west wall               | 1,000  | Automatic rifle; matching reserve refill costs 500      |
-| Trench-12, east wall          | 1,250  | Seven-pellet shotgun; matching reserve refill costs 625 |
-| Random Issue, southeast crate | 950    | Random pistol, rifle, or shotgun, with fresh ammo       |
-| North yard gate               | 750    | Opens the northern routes and machines                  |
-| Vitality, northwest machine   | 2,000  | Raises maximum health to 200 and heals                  |
-| Overcharge, northeast bench   | 3,000  | Doubles the current weapon's damage                     |
-
+| ----------------------------- | -----: | ------------------------------------------------------- |
+| AR-4, west wall               |  1,000 | Automatic rifle; matching reserve refill costs 500      |
+| Trench-12, east wall          |  1,250 | Seven-pellet shotgun; matching reserve refill costs 625 |
+| Random Issue, southeast crate |    950 | Random pistol, rifle, or shotgun, with fresh ammo       |
+| North yard gate               |    750 | Opens the northern routes and machines                  |
+| Vitality, northwest machine   |  2,000 | Raises maximum health to 200 and heals                  |
+| Overcharge, northeast bench   |  3,000 | Doubles the current weapon's damage                     |
 
 One firearm is carried at a time. New acquisitions replace it and remove its Overcharge; matching wall-ammo purchases preserve the upgrade. Full reserve refills and duplicate permanent upgrades are rejected without charging points. Buying does not pause combat.
 
@@ -164,13 +160,11 @@ docker compose down
 
 Compose binds to `127.0.0.1` by default. Set these variables in your shell or a local `.env` file beside `compose.yaml` to customize deployment:
 
-
 | Variable    | Default                        | Purpose                                               |
 | ----------- | ------------------------------ | ----------------------------------------------------- |
 | `HOST_PORT` | `3000`                         | Published host port; container port remains `3000`    |
 | `HOST_IP`   | `127.0.0.1`                    | Set `0.0.0.0` to expose the service on all interfaces |
 | `ORIGIN`    | `http://localhost:<HOST_PORT>` | Exact browser-facing origin, including scheme         |
-
 
 For example, behind an HTTPS reverse proxy:
 
@@ -192,6 +186,165 @@ docker run --rm --init --stop-timeout 35 -p 127.0.0.1:3000:3000 -e ORIGIN=http:/
 ```
 
 The engine is lazy-loaded separately from the menu. Vite can report a large Babylon chunk; the warning is not suppressed. The renderer uses WebGL, not WebGPU.
+
+### Jenkins: same-VPS deployment behind Nginx Proxy Manager
+
+`Jenkinsfile` checks out the configured GitHub SCM, builds an isolated CI image, runs
+type checks, formatting/ESLint, `bun audit`, and all Vitest tests, then builds the
+production image. Playwright exercises that **production container**, including
+shooting, reloading, pause, resize, and route remounts. Failed checks stop deployment.
+JUnit results, browser failure traces, and other test artifacts are retained by Jenkins.
+
+The deployment path is separate from the manual `compose.yaml` service:
+
+```text
+Nginx Proxy Manager (domain + TLS)
+  -> dead-signal-gateway:3000
+      -> current release container
+      -> candidate release, promoted only after health and browser checks
+```
+
+`deploy/deploy.sh` tests the candidate, archives its immutable assets, validates
+Nginx configuration, and gracefully reloads the gateway to switch new requests.
+Existing requests finish on the previous release. Fresh HTTP connections must
+return the candidate's release header and HTTP 200 before promotion is accepted.
+A failed post-switch check restores and verifies the previous configuration.
+The gateway is not recreated on subsequent deployments.
+
+This avoids a planned outage during release switches; it does not provide
+high availability against VPS failure, Docker restarts, resource exhaustion,
+or changes to NPM itself. The initial NPM upstream migration can interrupt
+requests. Budget CPU/RAM for CI browsers alongside the live and candidate games.
+
+#### Jenkins prerequisites and job setup
+
+1. Provide a **Linux agent on the VPS**, labelled `docker`, with Git, Bash, and the
+   Docker CLI connected to the VPS's Docker daemon. No host Bun, Node, browser,
+   Compose, registry, or SSH deployment connection is needed for this pipeline.
+   A containerized Jenkins agent can use the host Docker socket; the CLI still
+   needs to be installed and permitted to access it. CI uses baked images and
+   `docker cp`, not host workspace bind mounts.
+2. Install Jenkins **Pipeline**, **Git**, **JUnit**, and **Timestamper** plugins
+   and their dependencies. Use a supported Jenkins LTS release.
+3. Create a **Pipeline** job with **Pipeline script from SCM → Git**:
+   repository `git@github.com:105hua/cod-zombies-web-game.git`, branch `*/main`,
+   script path `Jenkinsfile`. Configure a Jenkins SSH private-key credential
+   for GitHub checkout and Git host-key verification. An HTTPS repository URL
+   with appropriate Jenkins credentials also works. Never put keys in the repo.
+4. Ensure NPM is attached to the external `npm_proxy` Docker network. The pipeline
+   checks that the network exists; it deliberately does not reconfigure NPM.
+   Declare the network in NPM's own Compose configuration so it survives NPM
+   recreation. If needed, create it once with `docker network create npm_proxy`.
+5. Run the job once with deployment disabled. Configure these build parameters:
+
+| Parameter        | Value                                                                           |
+| ---------------- | ------------------------------------------------------------------------------- |
+| `ORIGIN`         | Exact public origin, e.g. `https://game.example.com`; no path or trailing slash |
+| `DEPLOY_PROJECT` | `dead-signal` unless you need another namespace                                 |
+| `PROXY_NETWORK`  | `npm_proxy`, or the existing network shared with NPM                            |
+| `DEPLOY_ENABLED` | Initially `false`; enable after checks and VPS configuration are ready          |
+
+Production deployment requires `main`, no pull-request context, and
+`DEPLOY_ENABLED=true`. Other builds still run validation and image smoke tests.
+The release name includes the commit, build number, and a random token; the
+combined project/release container DNS name must fit 63 characters. Keep project
+names short and use only lowercase letters, digits, and hyphens.
+
+**Security:** Docker daemon access is effectively host-root access. Run only
+trusted repository code on this agent. Branch deployment conditions do **not**
+make untrusted fork PRs safe: their builds and Jenkinsfiles can execute code
+before the deployment stage. Use a separate isolated agent for untrusted code.
+Keep Jenkins off the public application network where possible.
+
+For push-triggered builds, optionally install/configure Jenkins' GitHub plugin,
+enable **GitHub hook trigger for GITScm polling**, and configure the repository's
+push webhook to your Jenkins `/github-webhook/` endpoint. Manual builds also work.
+GitHub credentials, webhook configuration, and Jenkins jobs are not created by
+checking in this file.
+
+#### First deployment and NPM configuration
+
+Run an enabled `main` build with the real `ORIGIN`. After it succeeds, configure
+the NPM Proxy Host:
+
+- Domain: your game domain.
+- Scheme: `http`.
+- Forward hostname: `dead-signal-gateway` (or `<DEPLOY_PROJECT>-gateway`).
+- Forward port: `3000`.
+- TLS/certificate: managed by NPM; use HTTPS matching `ORIGIN`.
+- Do not enable an HTML cache or add a second upstream switch in NPM.
+
+No app or gateway host ports are published by this deployment. NPM reaches the
+gateway over the shared Docker network; app containers use a separate internal
+network. Verify the public route after the initial migration:
+
+```sh
+curl -fsS -D - https://game.example.com/ -o /dev/null
+```
+
+Expect HTTP 200 and `X-Deployment-Release`. Jenkins verifies the internal
+candidate and gateway paths, not your public DNS, NPM certificate, or firewall.
+Once public access works, retire any old manual Compose deployment separately.
+Do not point NPM at the release-specific container name.
+
+#### Rollback, interrupted jobs, and retention
+
+Deployments are serialized per Jenkins job and additionally use an atomic Docker
+lock named `<project>-deploy-lock` across jobs. The lock is a **stopped container**;
+stopped does not mean stale. Do not remove it while a deployment is running.
+
+Persistent volumes are `<project>-gateway-config` and
+`<project>-immutable-assets`. The first contains `current`, an atomic symlink to
+`releases/<release-id>`, whose `state` file records active and previous release IDs.
+The second retains hashed JS/CSS from earlier releases so open browser tabs can
+still lazy-load their original code after promotion. Conflicting bytes at the
+same immutable asset path reject the candidate rather than overwrite old assets.
+
+For the default project:
+
+```sh
+docker exec dead-signal-gateway cat /deploy/current/state
+docker exec dead-signal-gateway readlink /deploy/current
+docker logs --tail 100 dead-signal-gateway
+docker ps -a --filter label=deploy.project=dead-signal
+docker top dead-signal-gateway -eo pid,args
+```
+
+Ordinary candidate health/browser failures leave the live release untouched.
+Confirmed post-switch failures attempt an automatic rollback. An interrupted
+Docker operation can still be executing remotely after its CLI exits: in that
+case the script retains the lock, helper, and release containers and fails
+loudly instead of racing another configuration change. A surviving
+`/deploy/pending` journal also blocks further deployments.
+
+For interrupted-operation recovery, stop/disable deployment jobs, inspect the
+retained helper with `docker top`, and establish that abandoned Docker operations
+have finished before changing state. Using a temporary Nginx container with the
+configuration volume mounted read-write, select a known-good release by creating
+`current.next` as a relative symlink to `releases/<id>` and atomically renaming it
+over `current`. Test and gracefully reload the gateway:
+
+```sh
+docker exec dead-signal-gateway nginx -t -c /deploy/current/nginx.conf
+docker exec dead-signal-gateway nginx -s reload -c /deploy/current/nginx.conf
+curl -fsS -D - https://game.example.com/ -o /dev/null
+```
+
+Verify the expected release header on fresh requests **before** removing
+`/deploy/pending`, abandoned helper containers, or the deployment lock. If the
+first deployment failed before a gateway existed, there is no previous live
+release; inspect and recover that bootstrap state rather than assume rollback.
+The comments in `deploy/deploy.sh` describe the same recovery constraints.
+
+Old release containers and their images are deliberately retained, including
+failed candidates that might still serve draining requests. **They continue
+consuming resources.** Regularly review disk/RAM usage. Remove obsolete containers
+only after confirming they are neither active nor previous and no old Nginx
+worker still uses them; `docker top` shows workers shutting down. Then remove
+their unreferenced images. Unused images from non-deploying Jenkins builds are
+removed automatically. Never broadly prune deployment volumes. Deleting archived
+immutable assets can break old browser tabs; retain them for your chosen client
+lifetime and back up both deployment volumes.
 
 ## Scope
 
