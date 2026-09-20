@@ -243,3 +243,47 @@ it.each(['fire', 'aim'] as const)(
 		}
 	}
 );
+
+it('settles camera motion when movement is blocked without drifting aim or collision position', async () => {
+	const canvas = document.createElement('canvas');
+	document.body.append(canvas);
+	const game = new Game(canvas, () => {});
+	try {
+		await game.start();
+		game.begin(true);
+		const engine = Engine.LastCreatedEngine!;
+		const camera = engine.scenes[0].activeCamera as UniversalCamera;
+		const render = engine.activeRenderLoops[0];
+		engine.stopRenderLoop();
+		vi.spyOn(engine, 'getDeltaTime').mockReturnValue(1000 / 60);
+		const eyeHeight = camera.position.y;
+		game.look(0, 100);
+		const pitch = camera.rotation.x;
+		game.setTouchMove(1, 0);
+		let bob = 0;
+		for (let frame = 0; frame < 30; frame++) {
+			render();
+			bob = Math.max(bob, Math.abs(camera.position.y - eyeHeight));
+		}
+		expect(bob).toBeGreaterThan(0.003);
+		expect(bob).toBeLessThan(0.05);
+		expect(Math.abs(camera.rotation.z)).toBeGreaterThan(0.001);
+		expect(camera.rotation.x).toBe(pitch);
+		expect(camera.rotation.y).toBe(0);
+
+		// Hold strafe into the world's collision boundary, not merely release the key.
+		camera.position.x = 21.4;
+		const z = camera.position.z;
+		for (let frame = 0; frame < 60; frame++) render();
+		expect(camera.position.x).toBe(21.4);
+		expect(camera.position.z).toBe(z);
+		expect(camera.position.y).toBeCloseTo(eyeHeight, 4);
+		expect(camera.rotation.z).toBeCloseTo(0, 4);
+		expect(camera.rotation.x).toBe(pitch);
+		expect(camera.rotation.y).toBe(0);
+	} finally {
+		vi.restoreAllMocks();
+		game.dispose();
+		canvas.remove();
+	}
+});

@@ -8,6 +8,7 @@ import { Navigation } from '../systems/Navigation';
 import { Horde, type Zombie } from '../entities/Horde';
 import { GameAudio } from '../systems/Audio';
 import { WeaponView } from '../player/WeaponView';
+import { CameraMotion } from '../player/CameraMotion';
 import { CombatEffects } from '../systems/CombatEffects';
 import type { GameSettings, HudSnapshot, PickupKind, Station } from '../types';
 
@@ -23,6 +24,7 @@ export class Game {
 	private horde?: Horde;
 	private navigation?: Navigation;
 	private weapon?: WeaponView;
+	private cameraMotion?: CameraMotion;
 	private effects?: CombatEffects;
 	private pickups: Pickup[] = [];
 	private keys = new Set<string>();
@@ -45,6 +47,7 @@ export class Game {
 		aiming: false,
 		sprinting: false,
 		movement: 0,
+		gaitPhase: 0,
 		reloading: false,
 		reloadProgress: 0,
 		lookX: 0,
@@ -130,6 +133,7 @@ export class Game {
 		this.weapon?.dispose();
 		this.level?.scene.dispose();
 		this.level = createScene(this.engine);
+		this.cameraMotion = new CameraMotion(this.level.camera);
 		this.horde = new Horde(this.level.scene);
 		this.navigation = new Navigation(this.level.world.obstacles);
 		this.pickups = [];
@@ -392,13 +396,19 @@ export class Game {
 			0.38,
 			this.canPlayerOccupy
 		);
-		const movement = Math.min(
-			1,
-			Math.hypot(camera.position.x - previousX, camera.position.z - previousZ) / (4.2 * dt)
+		const dx = camera.position.x - previousX;
+		const dz = camera.position.z - previousZ;
+		const distance = Math.hypot(dx, dz);
+		const movement = Math.min(1, distance / (4.2 * dt));
+		this.cameraMotion!.update(
+			dt,
+			distance,
+			(dx * Math.cos(yaw) - dz * Math.sin(yaw)) / dt,
+			sprint,
+			this.aiming
 		);
 		if (this.keys.has('ArrowLeft')) camera.rotation.y -= dt * 1.7;
 		if (this.keys.has('ArrowRight')) camera.rotation.y += dt * 1.7;
-		camera.fov += ((this.aiming ? 0.82 : sprint ? 1.35 : 1.25) - camera.fov) * Math.min(1, dt * 10);
 		this.navigationTimer -= dt;
 		if (this.navigationTimer <= 0) {
 			this.navigation!.rebuild(camera.position.x, camera.position.z);
@@ -429,7 +439,8 @@ export class Game {
 		const pose = this.weaponState;
 		pose.aiming = this.aiming;
 		pose.sprinting = sprint;
-		pose.movement = movement;
+		pose.movement = this.cameraMotion!.movement;
+		pose.gaitPhase = this.cameraMotion!.phase;
 		pose.reloading = state.reloading > 0;
 		pose.reloadProgress = pose.reloading ? 1 - state.reloading / WEAPONS[state.weapon].reload : 0;
 		pose.lookX = this.lookX;

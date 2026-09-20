@@ -9,11 +9,11 @@ import { Navigation } from '../systems/Navigation';
 let engine: NullEngine | undefined;
 afterEach(() => engine?.dispose());
 
-function createHorde() {
+function createHorde(round = 1) {
 	engine = new NullEngine();
 	const scene = new Scene(engine);
 	const horde = new Horde(scene);
-	horde.spawn(0, 0, 1);
+	horde.spawn(0, 0, round);
 	return { scene, horde };
 }
 
@@ -72,4 +72,93 @@ it('removes dead enemies from shots immediately and expires their visual remains
 	for (let step = 0; step < 80; step++)
 		horde.update(0.05, step * 0.05, { x: 0, z: -3 }, navigation, () => {});
 	expect(enemy.root.isDisposed()).toBe(true);
+});
+
+it('turns toward a reversed target before advancing instead of skating backwards', () => {
+	const { horde } = createHorde();
+	const navigation = new Navigation([]);
+	const player = { x: 0, z: 10 };
+	navigation.rebuild(player.x, player.z);
+	for (let frame = 0; frame < 60; frame++)
+		horde.update(1 / 60, frame / 60, player, navigation, () => {});
+	const enemy = horde.enemies[0];
+	player.z = -10;
+	navigation.rebuild(player.x, player.z);
+	const before = enemy.root.position.clone();
+	horde.update(1 / 60, 1, player, navigation, () => {});
+	const dx = enemy.root.position.x - before.x;
+	const dz = enemy.root.position.z - before.z;
+	const forward = dx * Math.sin(enemy.root.rotation.y) + dz * Math.cos(enemy.root.rotation.y);
+	expect(forward).toBeGreaterThanOrEqual(0);
+	for (let frame = 0; frame < 240; frame++)
+		horde.update(1 / 60, 1 + frame / 60, player, navigation, () => {});
+	expect(enemy.root.position.z).toBeLessThan(before.z - 1);
+});
+
+it('builds momentum from rest rather than starting at cruising speed', () => {
+	const { horde } = createHorde();
+	const navigation = new Navigation([]);
+	const player = { x: 0, z: 20 };
+	navigation.rebuild(player.x, player.z);
+	const enemy = horde.enemies[0];
+	horde.update(1 / 60, 0, player, navigation, () => {});
+	const firstStep = enemy.root.position.z;
+	for (let frame = 0; frame < 90; frame++)
+		horde.update(1 / 60, frame / 60, player, navigation, () => {});
+	const before = enemy.root.position.z;
+	horde.update(1 / 60, 2, player, navigation, () => {});
+	expect(firstStep).toBeGreaterThan(0);
+	expect(firstStep).toBeLessThan((enemy.root.position.z - before) * 0.4);
+});
+
+it('separates crowded attackers at close range and continues attacking', () => {
+	const { horde } = createHorde();
+	horde.enemies[0].root.position.x = -0.2;
+	horde.spawn(0.2, 0, 1);
+	const navigation = new Navigation([]);
+	const player = { x: 0, z: 0.8 };
+	navigation.rebuild(player.x, player.z);
+	let laterHits = 0;
+	for (let frame = 0; frame < 600; frame++) {
+		horde.update(1 / 60, frame / 60, player, navigation, () => {
+			if (frame > 300) laterHits++;
+		});
+	}
+	expect(
+		Vector3.Distance(horde.enemies[0].root.position, horde.enemies[1].root.position)
+	).toBeGreaterThan(0.6);
+	expect(laterHits).toBeGreaterThan(0);
+});
+
+it.each([1, 18])('keeps a supporting boot on the floor throughout the round %s gait', (round) => {
+	const { scene, horde } = createHorde(round);
+	const navigation = new Navigation([]);
+	const player = { x: 0, z: 20 };
+	navigation.rebuild(player.x, player.z);
+	const soles = scene.meshes.filter((mesh) => mesh.name.startsWith('boot-sole'));
+	const point = new Vector3();
+	let lowest = Infinity;
+	let highest = -Infinity;
+	for (let frame = 0; frame < 180; frame++) {
+		horde.update(1 / 60, frame / 60, player, navigation, () => {});
+		let support = Infinity;
+		for (const sole of soles) {
+			const world = sole.computeWorldMatrix(true);
+			const positions = sole.getVerticesData('position')!;
+			for (let vertex = 0; vertex < positions.length; vertex += 3) {
+				Vector3.TransformCoordinatesFromFloatsToRef(
+					positions[vertex],
+					positions[vertex + 1],
+					positions[vertex + 2],
+					world,
+					point
+				);
+				support = Math.min(support, point.y);
+			}
+		}
+		lowest = Math.min(lowest, support);
+		highest = Math.max(highest, support);
+	}
+	expect(lowest).toBeGreaterThan(-0.01);
+	expect(highest).toBeLessThan(0.01);
 });

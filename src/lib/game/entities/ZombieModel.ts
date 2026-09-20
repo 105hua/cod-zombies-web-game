@@ -20,6 +20,9 @@ export interface ZombieModel {
 	asymmetry: number;
 }
 
+// Shared contact dimensions keep procedural gait support aligned with the rendered boot.
+export const ZOMBIE_BOOT_SOLE = { y: -0.438, halfDepth: 0.142, z: 0.037 } as const;
+
 // Cross-sections in joint-local space: height, half width, half depth, depth offset.
 type Section = readonly [y: number, width: number, depth: number, z: number];
 
@@ -523,7 +526,7 @@ export class ZombieModels {
 				'boot-sole',
 				knee,
 				[
-					[-0.438, 0.087, 0.142, 0.037],
+					[ZOMBIE_BOOT_SOLE.y, 0.087, ZOMBIE_BOOT_SOLE.halfDepth, ZOMBIE_BOOT_SOLE.z],
 					[-0.411, 0.09, 0.146, 0.037]
 				],
 				shadow

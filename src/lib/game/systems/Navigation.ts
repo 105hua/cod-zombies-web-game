@@ -120,6 +120,13 @@ export class Navigation {
 	}
 
 	direction(x: number, z: number, targetX: number, targetZ: number) {
+		// Visible targets do not need the grid: cell-center pursuit produces artificial zigzags.
+		if (this.clearPath(x, z, targetX, targetZ)) {
+			const dx = targetX - x;
+			const dz = targetZ - z;
+			const length = Math.hypot(dx, dz) || 1;
+			return { x: dx / length, z: dz / length };
+		}
 		const cx = Math.round(x + OFFSET);
 		const cz = Math.round(z + OFFSET);
 		let best = this.distance[cz * SIZE + cx];

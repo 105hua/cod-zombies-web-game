@@ -14,6 +14,7 @@ interface ViewState {
 	aiming: boolean;
 	sprinting: boolean;
 	movement: number;
+	gaitPhase: number;
 	reloading: boolean;
 	reloadProgress: number;
 	lookX: number;
@@ -64,8 +65,6 @@ export class WeaponView {
 	private id: WeaponId = 'pistol';
 	private disposed = false;
 	private time = 0;
-	private walk = 0;
-	private movement = 0;
 	private ads = 0;
 	private sprint = 0;
 	private swayX = 0;
@@ -199,8 +198,8 @@ export class WeaponView {
 			((state.aiming && !state.reloading && this.meleeAge > 0.5 ? 1 : 0) - this.ads) * response;
 		this.sprint +=
 			((state.sprinting && !state.reloading ? 1 : 0) - this.sprint) * (1 - Math.exp(-dt * 9));
-		this.movement += (Math.min(1, Math.max(0, state.movement)) - this.movement) * response;
-		this.walk += dt * (this.sprint > 0.5 ? 14 : 9) * this.movement;
+		const movement = state.movement;
+		const walk = state.gaitPhase;
 		this.swayX += (Math.max(-1, Math.min(1, state.lookX)) - this.swayX) * response;
 		this.swayY += (Math.max(-1, Math.min(1, state.lookY)) - this.swayY) * response;
 		const spring = this.id === 'shotgun' ? 13 : this.id === 'rifle' ? 23 : 19;
@@ -214,8 +213,8 @@ export class WeaponView {
 		const thrust = Math.sin(Math.PI * ramp(this.meleeAge, 0.08, 0.36));
 		const settle = 1 - ramp(this.equipAge, 0, 0.28);
 		const free = 1 - this.ads * 0.92;
-		const bob = Math.sin(this.walk) * this.movement * free;
-		const breath = Math.sin(this.time * 1.8) * (1 - this.movement) * 0.0025;
+		const bob = Math.sin(walk) * movement * free;
+		const breath = Math.sin(this.time * 1.8) * (1 - movement) * 0.0025;
 		const aspect = Math.min(1, this.scene.getEngine().getAspectRatio(this.camera));
 		this.root.position.set(
 			0.235 * aspect * (1 - this.ads) + bob * 0.009 - this.swayX * 0.013 * free - melee * 0.16,
@@ -223,7 +222,7 @@ export class WeaponView {
 				this.sightY * this.ads -
 				this.sprint * 0.105 -
 				reloadPose * 0.09 +
-				Math.cos(this.walk * 2) * this.movement * 0.007 * free +
+				Math.cos(walk * 2) * movement * 0.007 * free +
 				breath * free -
 				settle * 0.16 +
 				melee * 0.055,
