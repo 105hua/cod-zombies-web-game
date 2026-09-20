@@ -45,26 +45,65 @@ pipeline {
             }
         }
 
-        stage('Build CI image') {
+        stage('Install Dependencies') {
             steps {
                 sh '''#!/usr/bin/env bash
 set -euo pipefail
-docker build --file ci/Dockerfile --tag "$CI_IMAGE" .
+docker build --file ci/Dockerfile --target dependencies --tag "$CI_IMAGE" .
 '''
             }
         }
 
-        stage('Check, lint, audit and unit tests') {
+        stage('Prepare Browser Tests') {
             steps {
                 sh '''#!/usr/bin/env bash
 set -euo pipefail
-docker run --name "$CHECK_CONTAINER" --label "ci.build-token=$RELEASE_ID" \
-    --label ci.reports=checks --shm-size=1g "$CI_IMAGE" bash ci/check.sh
+docker build --file ci/Dockerfile --target runner --tag "$CI_IMAGE" .
 '''
             }
         }
 
-        stage('Build production image') {
+        stage('Type Check') {
+            steps {
+                sh '''#!/usr/bin/env bash
+set -euo pipefail
+docker run --name "$CHECK_CONTAINER-types" --label "ci.build-token=$RELEASE_ID" \
+    "$CI_IMAGE" bun run check
+'''
+            }
+        }
+
+        stage('Lint') {
+            steps {
+                sh '''#!/usr/bin/env bash
+set -euo pipefail
+docker run --name "$CHECK_CONTAINER-lint" --label "ci.build-token=$RELEASE_ID" \
+    "$CI_IMAGE" bun run lint
+'''
+            }
+        }
+
+        stage('Dependency Audit') {
+            steps {
+                sh '''#!/usr/bin/env bash
+set -euo pipefail
+docker run --name "$CHECK_CONTAINER-audit" --label "ci.build-token=$RELEASE_ID" \
+    "$CI_IMAGE" bun audit
+'''
+            }
+        }
+
+        stage('Unit Tests') {
+            steps {
+                sh '''#!/usr/bin/env bash
+set -euo pipefail
+docker run --name "$CHECK_CONTAINER-unit" --label "ci.build-token=$RELEASE_ID" \
+    --label ci.reports=unit --shm-size=1g "$CI_IMAGE"
+'''
+            }
+        }
+
+        stage('Build Production Image') {
             steps {
                 sh '''#!/usr/bin/env bash
 set -euo pipefail
@@ -73,14 +112,15 @@ docker build --file Dockerfile --tag "$APP_IMAGE" .
             }
         }
 
-        stage('Smoke production image') {
+        stage('Smoke Tests') {
             steps {
                 sh '''#!/usr/bin/env bash
 set -euo pipefail
+# Bare "app" is HSTS-preloaded in Chromium; reserve .test for this HTTP-only network.
 docker network create --internal --label "ci.build-token=$RELEASE_ID" "$SMOKE_NETWORK"
 docker run --detach --name "$SMOKE_APP" --label "ci.build-token=$RELEASE_ID" \
-    --network "$SMOKE_NETWORK" --network-alias app \
-    --env ORIGIN=http://app:3000 --health-interval=2s --health-start-period=5s \
+    --network "$SMOKE_NETWORK" --network-alias app.test \
+    --env ORIGIN=http://app.test:3000 --health-interval=2s --health-start-period=5s \
     --health-retries=15 "$APP_IMAGE"
 for attempt in {1..60}; do
     health=$(docker inspect --format '{{.State.Health.Status}}' "$SMOKE_APP")
@@ -97,13 +137,13 @@ for attempt in {1..60}; do
 done
 docker run --name "$SMOKE_CONTAINER" --label "ci.build-token=$RELEASE_ID" \
     --label ci.reports=image-smoke --network "$SMOKE_NETWORK" --shm-size=1g \
-    --env CI=true --env PLAYWRIGHT_BASE_URL=http://app:3000 \
+    --env CI=true --env PLAYWRIGHT_BASE_URL=http://app.test:3000 \
     "$CI_IMAGE" bun x playwright test
 '''
             }
         }
 
-        stage('Deploy main') {
+        stage('Deploy') {
             when {
                 allOf {
                     expression { params.DEPLOY_ENABLED }

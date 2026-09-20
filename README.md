@@ -195,6 +195,25 @@ production image. Playwright exercises that **production container**, including
 shooting, reloading, pause, resize, and route remounts. Failed checks stop deployment.
 JUnit results, browser failure traces, and other test artifacts are retained by Jenkins.
 
+The job exposes these separately timed stages:
+
+```text
+Checkout → Install Dependencies → Prepare Browser Tests → Type Check → Lint
+         → Dependency Audit → Unit Tests → Build Production Image → Smoke Tests → Deploy
+```
+
+Install **[Pipeline: Stage View](https://plugins.jenkins.io/pipeline-stage-view/)**
+in Jenkins to see stage status, duration, and stage-specific logs on the job page.
+Dependency installation and browser preparation use separate Docker build targets
+and reuse cached layers. A cached stage can therefore finish quickly without
+reinstalling dependencies. Deployment remains one stage so promotion and rollback
+stay within the same coordinated operation.
+
+The isolated smoke network uses `http://app.test:3000`. Do not shorten this to
+`http://app:3000`: Chromium's HSTS preload list forces the bare `app` hostname to
+HTTPS, causing `ERR_SSL_PROTOCOL_ERROR` against the HTTP-only container.
+This internal test address does not change the public `ORIGIN` or NPM TLS setup.
+
 The deployment path is separate from the manual `compose.yaml` service:
 
 ```text
